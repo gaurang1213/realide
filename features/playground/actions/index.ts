@@ -106,21 +106,32 @@ export const getAllPlaygroundForUser = async ()=>{
 }
 
 export const getPlaygroundById = async (id:string)=>{
-    try {
-        const playground = await db.playground.findUnique({
-            where:{id},
-            select:{
-              templateFiles:{
-                select:{
-                  content:true
-                }
-              }
-            }
-        })
-        return playground;
-    } catch (error) {
-        console.log(error)
+  try {
+    // Prefer reading the saved template content via templateFile keyed by playgroundId
+    const tf = await db.templateFile.findUnique({
+      where: { playgroundId: id }
+    } as any);
+
+    if (tf && typeof (tf as any).content !== 'undefined') {
+      return { templateFiles: [{ content: (tf as any).content }] } as any;
     }
+
+    // Fallback: try to read from playground relation if available
+    const playground = await db.playground.findUnique({
+      where: { id },
+      include: { templateFiles: true } as any,
+    } as any);
+
+    if (playground && Array.isArray((playground as any).templateFiles)) {
+      return { templateFiles: (playground as any).templateFiles.map((f:any)=>({ content: f.content })) } as any;
+    }
+
+    // Default empty
+    return { templateFiles: [] } as any;
+  } catch (error) {
+    console.log(error)
+    return { templateFiles: [] } as any;
+  }
 }
 
 export const SaveUpdatedCode = async (playgroundId: string, data: TemplateFolder) => {

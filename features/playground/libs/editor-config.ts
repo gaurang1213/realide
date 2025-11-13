@@ -316,7 +316,7 @@ export const defaultEditorOptions = {
   suggestOnTriggerCharacters: true,
   acceptSuggestionOnEnter: "on" as const,
   tabCompletion: "on" as const,
-  wordBasedSuggestions: true,
+  wordBasedSuggestions: "allDocuments" as const,
   quickSuggestions: {
     other: true,
     comments: false,

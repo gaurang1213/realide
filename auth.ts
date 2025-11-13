@@ -21,33 +21,33 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         where: { email: user.email! },
       });
 
-      // If user does not exist, create a new one
+      // If user does not exist, create a new one and link the account
       if (!existingUser) {
         const newUser = await db.user.create({
           data: {
             email: user.email!,
             name: user.name,
             image: user.image,
-           
-            accounts: {
-              // @ts-ignore
-              create: {
-                type: account.type,
-                provider: account.provider,
-                providerAccountId: account.providerAccountId,
-                refreshToken: account.refresh_token,
-                accessToken: account.access_token,
-                expiresAt: account.expires_at,
-                tokenType: account.token_type,
-                scope: account.scope,
-                idToken: account.id_token,
-                sessionState: account.session_state,
-              },
-            },
           },
         });
 
-        if (!newUser) return false; // Return false if user creation fails
+        if (!newUser) return false;
+
+        await db.account.create({
+          data: {
+            userId: newUser.id,
+            type: account.type,
+            provider: account.provider,
+            providerAccountId: account.providerAccountId,
+            refreshToken: account.refresh_token,
+            accessToken: account.access_token,
+            expiresAt: account.expires_at,
+            tokenType: (account.token_type as any) ?? null,
+            scope: account.scope,
+            idToken: account.id_token,
+            sessionState: account.session_state != null ? String(account.session_state) : null,
+          },
+        });
       } else {
         // Link the account if user exists
         const existingAccount = await db.account.findUnique({
@@ -70,11 +70,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
               refreshToken: account.refresh_token,
               accessToken: account.access_token,
               expiresAt: account.expires_at,
-              tokenType: account.token_type,
+              tokenType: (account.token_type as any) ?? null,
               scope: account.scope,
               idToken: account.id_token,
-              // @ts-ignore
-              sessionState: account.session_state,
+              sessionState: account.session_state != null ? String(account.session_state) : null,
             },
           });
         }

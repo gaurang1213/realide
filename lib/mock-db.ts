@@ -180,6 +180,37 @@ export const mockDb = {
       return newItem;
     }
   },
+  account: {
+    findUnique: async ({ where }: { where: { provider_providerAccountId: { provider: string; providerAccountId: string } } }) => {
+      const { provider, providerAccountId } = where.provider_providerAccountId;
+      return (
+        mockAccounts.find(
+          (a) => a.provider === provider && a.providerAccountId === providerAccountId
+        ) || null
+      ) as any;
+    },
+    findFirst: async ({ where }: { where: { userId: string } }) => {
+      const { userId } = where;
+      return (mockAccounts.find((a) => a.userId === userId) || null) as any;
+    },
+    create: async ({ data }: { data: any }) => {
+      const acc: Account = {
+        userId: data.userId,
+        type: data.type,
+        provider: data.provider,
+        providerAccountId: data.providerAccountId,
+        refreshToken: data.refreshToken ?? null,
+        accessToken: data.accessToken ?? null,
+        expiresAt: data.expiresAt ?? null,
+        tokenType: data.tokenType ?? null,
+        scope: data.scope ?? null,
+        idToken: data.idToken ?? null,
+        sessionState: data.sessionState ?? null,
+      };
+      mockAccounts.push(acc);
+      return acc as any;
+    },
+  },
   starMark: {
     create: async ({ data }: { data: StarMark }) => {
       const exists = mockStarMarks.find(s => s.userId === data.userId && s.playgroundId === data.playgroundId);

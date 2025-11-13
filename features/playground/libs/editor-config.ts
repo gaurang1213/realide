@@ -272,9 +272,10 @@ export const defaultEditorOptions = {
   // Layout
   minimap: { 
     enabled: true,
-    size: "proportional",
-    showSlider: "mouseover"
+    size: "proportional" as const,
+    showSlider: "mouseover" as const
   },
+  
   scrollBeyondLastLine: false,
   automaticLayout: true,
   padding: { top: 16, bottom: 16 },

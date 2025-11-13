@@ -22,6 +22,22 @@ const mockPlaygrounds: Playground[] = [
   },
 ];
 
+type Account = {
+  userId: string;
+  type: string;
+  provider: string;
+  providerAccountId: string;
+  refreshToken?: string | null;
+  accessToken?: string | null;
+  expiresAt?: number | null;
+  tokenType?: string | null;
+  scope?: string | null;
+  idToken?: string | null;
+  sessionState?: string | null;
+};
+
+const mockAccounts: Account[] = [];
+
 type StarMark = {
   userId: string;
   playgroundId: string;
@@ -186,6 +202,35 @@ export const mockDb = {
     },
     findUniqueById: async ({ where }: { where: { id: string } }) => {
       return mockUsers.find(u => u.id === where.id) || null;
-    }
+    },
+    create: async ({ data }: { data: Partial<User> & { accounts?: { create: any } } }) => {
+      const newUser: User = {
+        id: `mock-user-${Date.now()}`,
+        name: (data.name as any) || null,
+        email: data.email as string,
+        image: (data.image as any) || null,
+        role: 'USER' as any,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockUsers.push(newUser);
+      if (data.accounts && (data.accounts as any).create) {
+        const a = (data.accounts as any).create;
+        mockAccounts.push({
+          userId: newUser.id,
+          type: a.type,
+          provider: a.provider,
+          providerAccountId: a.providerAccountId,
+          refreshToken: a.refreshToken ?? null,
+          accessToken: a.accessToken ?? null,
+          expiresAt: a.expiresAt ?? null,
+          tokenType: a.tokenType ?? null,
+          scope: a.scope ?? null,
+          idToken: a.idToken ?? null,
+          sessionState: a.sessionState ?? null,
+        });
+      }
+      return newUser;
+    },
   }
 };

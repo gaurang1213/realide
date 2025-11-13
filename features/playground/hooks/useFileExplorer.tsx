@@ -27,17 +27,18 @@ interface FileExplorerState {
     parentPath: string,
     writeFileSync: (filePath: string, content: string) => Promise<void>,
     instance: any,
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    saveTemplateData: (data: TemplateFolder) => Promise<void>,
+    openAfterCreate?: boolean
   ) => Promise<void>;
   handleAddFolder: (
-    newFolder: TemplateFolder, 
-    parentPath: string, 
-    instance: any, 
+    newFolder: TemplateFolder,
+    parentPath: string,
+    instance: any,
     saveTemplateData: (data: TemplateFolder) => Promise<void>
   ) => Promise<void>;
   handleDeleteFile: (
-    file: TemplateFile, 
-    parentPath: string, 
+    file: TemplateFile,
+    parentPath: string,
     saveTemplateData: (data: TemplateFolder) => Promise<void>
   ) => Promise<void>;
   handleDeleteFolder: (
@@ -59,6 +60,8 @@ interface FileExplorerState {
     saveTemplateData: (data: TemplateFolder) => Promise<void>
   ) => Promise<void>;
   updateFileContent: (fileId: string, content: string) => void;
+  markFileSaved: (fileId: string, content: string) => void;
+  updateTemplateFileContent: (fileId: string, content: string) => void;
 }
 
 interface OpenFile extends TemplateFile {
@@ -84,12 +87,50 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
   setActiveFileId: (fileId) => set({ activeFileId: fileId }),
 
   openFile: (file) => {
-    const fileId = generateFileId(file, get().templateData!);
+    const template = get().templateData!;
+    const fileId = generateFileId(file, template);
     const { openFiles } = get();
     const existingFile = openFiles.find((f) => f.id === fileId);
 
+    // Resolve authoritative content from templateData by path; fallback to existing or file.content
+    let resolvedContent = "";
+    let resolvedFromTemplate = false;
+    try {
+      const parts = fileId.split('/').filter(Boolean);
+      const fname = parts.pop() || "";
+      const [name, ...extParts] = fname.split('.');
+      const ext = extParts.join('.');
+      let folder: TemplateFolder = template;
+      for (const p of parts) {
+        const f = folder.items.find((it: any) => 'folderName' in it && it.folderName === p) as TemplateFolder | undefined;
+        if (!f) { folder = template; break; }
+        folder = f;
+      }
+      const match = folder.items.find((it: any) => 'filename' in it && it.filename === name && it.fileExtension === ext) as TemplateFile | undefined;
+      if (match && typeof match.content === 'string') { resolvedContent = match.content; resolvedFromTemplate = true; }
+    } catch {}
+    if (!resolvedContent) {
+      // fallback to already-open content or provided file content
+      resolvedContent = existingFile?.content ?? file.content ?? "";
+    }
+
     if (existingFile) {
-      set({ activeFileId: fileId, editorContent: existingFile.content });
+      // Update visible editor to authoritative content; preserve hasUnsavedChanges
+      const updatedFiles = openFiles.map(f =>
+        f.id === fileId
+          ? {
+              ...f,
+              // Only update content if we resolved authoritative content; otherwise keep existing
+              content: resolvedFromTemplate ? resolvedContent : f.content,
+              originalContent: resolvedFromTemplate ? resolvedContent : f.originalContent,
+            }
+          : f
+      );
+      set({
+        openFiles: updatedFiles,
+        activeFileId: fileId,
+        editorContent: resolvedFromTemplate ? resolvedContent : (existingFile?.content ?? ""),
+      });
       return;
     }
 
@@ -97,15 +138,59 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
       ...file,
       id: fileId,
       hasUnsavedChanges: false,
-      content: file.content || "",
-      originalContent: file.content || "",
+      content: resolvedContent,
+      originalContent: resolvedContent,
     };
 
     set((state) => ({
       openFiles: [...state.openFiles, newOpenFile],
       activeFileId: fileId,
-      editorContent: file.content || "",
+      editorContent: resolvedContent,
     }));
+  },
+  updateTemplateFileContent: (fileId, content) => {
+    set((state) => {
+      if (!state.templateData) return {} as any;
+      const next = JSON.parse(JSON.stringify(state.templateData)) as TemplateFolder;
+      // fileId like "dir/sub/name.ext" or "name.ext"
+      const parts = fileId.split('/').filter(Boolean);
+      const filenameWithExt = parts.pop() || '';
+      const [name, ...extParts] = filenameWithExt.split('.');
+      const ext = extParts.join('.');
+      
+      // Helper function to update content in a folder
+      const updateContentInFolder = (folder: TemplateFolder): boolean => {
+        for (let i = 0; i < folder.items.length; i++) {
+          const item = folder.items[i];
+          if ('filename' in item && item.filename === name && item.fileExtension === ext) {
+            folder.items[i] = { ...item, content };
+            return true;
+          }
+          if ('folderName' in item) {
+            if (updateContentInFolder(item as TemplateFolder)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+      
+      // Update content in the root folder
+      updateContentInFolder(next);
+      let folder: TemplateFolder = next;
+      for (const p of parts) {
+        const f = folder.items.find((it) => 'folderName' in it && it.folderName === p) as TemplateFolder | undefined;
+        if (!f) return {} as any;
+        folder = f;
+      }
+      const idx = folder.items.findIndex((it) => 'filename' in it && it.filename === name && (it as any).fileExtension === ext);
+      if (idx !== -1) {
+        const file = folder.items[idx] as any;
+        folder.items[idx] = { ...file, content } as any;
+        return { templateData: next } as any;
+      }
+      return {} as any;
+    });
   },
 
   closeFile: (fileId) => {
@@ -144,7 +229,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     });
   },
 
-  handleAddFile: async (newFile, parentPath, writeFileSync, instance, saveTemplateData) => {
+  handleAddFile: async (newFile, parentPath, writeFileSync, instance, saveTemplateData, openAfterCreate = true) => {
     const { templateData } = get();
     if (!templateData) return;
 
@@ -177,7 +262,9 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
         await writeFileSync(filePath, newFile.content || "");
       }
 
-      get().openFile(newFile);
+      if (openAfterCreate) {
+        get().openFile(newFile);
+      }
     } catch (error) {
       console.error("Error adding file:", error);
       toast.error("Failed to create file");
@@ -447,6 +534,22 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
               ...file,
               content,
               hasUnsavedChanges: content !== file.originalContent,
+            }
+          : file
+      ),
+      editorContent:
+        fileId === state.activeFileId ? content : state.editorContent,
+    }));
+  },
+  markFileSaved: (fileId, content) => {
+    set((state) => ({
+      openFiles: state.openFiles.map((file) =>
+        file.id === fileId
+          ? {
+              ...file,
+              originalContent: content,
+              content,
+              hasUnsavedChanges: false,
             }
           : file
       ),

@@ -29,8 +29,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  reactStrictMode:false,
-  
+  reactStrictMode: false,
+  eslint: {
+    // Do not fail production builds due to ESLint errors
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;

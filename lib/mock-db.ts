@@ -228,8 +228,17 @@ export const mockDb = {
     },
   },
   user: {
-    findUnique: async ({ where }: { where: { email: string } }) => {
-      return mockUsers.find(u => u.email === where.email) || null;
+    findUnique: async ({ where, include }: { where: { email?: string; id?: string }, include?: { accounts?: boolean } }) => {
+      let user: User | undefined;
+      if (where.email) user = mockUsers.find(u => u.email === where.email);
+      else if (where.id) user = mockUsers.find(u => u.id === where.id);
+      const base = user || null;
+      if (!base) return null as any;
+      if (include?.accounts) {
+        const accounts = mockAccounts.filter(a => a.userId === base.id);
+        return { ...base, accounts } as any;
+      }
+      return base as any;
     },
     findUniqueById: async ({ where }: { where: { id: string } }) => {
       return mockUsers.find(u => u.id === where.id) || null;
